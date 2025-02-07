@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Face Recognition Attendance System</title>
+    <script src="https://cdn.tailwindcs.com"></script>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" rel="stylesheet">
+    <style>
+        .neubrutalism {
+            box-shadow: 5px 5px 0px rgba(0,0,0,0.9);
+            border: 3px solid black;
+        }
+        .loading {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.7);
+            z-index: 999;
+            justify-content: center;
+            align-items: center;
+            color: white;
+        }
+        @media (max-width: 768px) {
+            .form-container {
+                width: 90% !important;
+                margin: 20px auto;
+            }
+        }
+    </style>
+</head>
+<body class="bg-[#53d5fd] min-h-screen">
+    <div id="loading" class="loading">
+        <div class="text-2xl">Processing... <i class="bi bi-arrow-repeat animate-spin"></i></div>
+    </div>
+
+    <!-- Login Page -->
+    <div id="loginPage" class="container mx-auto px-4 py-8">
+        <div class="max-w-md mx-auto bg-white p-8 neubrutalism">
+            <h1 class="text-3xl font-bold mb-6 text-center">Face Recognition Attendance</h1>
+            <form id="loginForm" class="space-y-4">
+                <div>
+                    <label class="block mb-2 font-bold">Name</label>
+                    <input type="text" id="name" required class="w-full p-2 neubrutalism">
+                </div>
+                <div>
+                    <label class="block mb-2 font-bold">Roll Number</label>
+                    <input type="text" id="rollNumber" required class="w-full p-2 neubrutalism">
+                </div>
+                <div>
+                    <label class="block mb-2 font-bold">Email</label>
+                    <input type="email" id="email" required class="w-full p-2 neubrutalism">
+                </div>
+                <div>
+                    <label class="block mb-2 font-bold">Password</label>
+                    <input type="password" id="password" required class="w-full p-2 neubrutalism">
+                </div>
+                <button type="submit" class="w-full bg-[#ff8647] text-white p-3 font-bold neubrutalism hover:bg-[#ff7633] transition-all">
+                    Login
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Recognition Page -->
+    <div id="recognitionPage" class="hidden container mx-auto px-4 py-8">
+        <div class="max-w-3xl mx-auto bg-white p-8 neubrutalism">
+            <h2 class="text-2xl font-bold mb-6">Face Recognition</h2>
+            <div class="mb-6">
+                <video id="webcam" class="w-full neubrutalism" autoplay></video>
+            </div>
+            <div class="flex justify-between gap-4">
+                <button id="startCamera" class="bg-[#53d5fd] text-white p-3 font-bold neubrutalism hover:bg-[#4bc5eb] transition-all">
+                    Start Camera
+                </button>
+                <button id="markAttendance" class="bg-[#ff8647] text-white p-3 font-bold neubrutalism hover:bg-[#ff7633] transition-all">
+                    Mark Attendance
+                </button>
+                <button id="downloadReport" class="bg-[#53d5fd] text-white p-3 font-bold neubrutalism hover:bg-[#4bc5eb] transition-all">
+                    Download Report
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let userId = localStorage.getItem('userId') || `user-${Date.now()}`;
+        const appSlug = 'face-attendance-001';
+        localStorage.setItem('userId', userId);
+
+        // Handle Login
+        document.getElementById('loginForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            document.getElementById('loading').style.display = 'flex';
+            
+            try {
+                const userData = {
+                    name: document.getElementById('name').value,
+                    rollNumber: document.getElementById('rollNumber').value,
+                    email: document.getElementById('email').value,
+                    password: document.getElementById('password').value
+                };
+
+                const response = await fetch('https://r0c8kgwocscg8gsokogwwsw4.zetaverse.one/db', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': 'Bearer 8WcCWeC8HrQ4AxRoBALuwjOMW4K3',
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        userId,
+                        appSlug,
+                        action: 'create',
+                        table: 'users',
+                        data: userData
+                    })
+                });
+
+                const result = await response.json();
+                if (!result.error) {
+                    document.getElementById('loginPage').classList.add('hidden');
+                    document.getElementById('recognitionPage').classList.remove('hidden');
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                alert('Login failed. Please try again.');
+            } finally {
+                document.getElementById('loading').style.display = 'none';
+            }
+        });
+
+        // Handle Camera
+        let stream;
+        document.getElementById('startCamera').addEventListener('click', async () => {
+            try {
+                stream = await navigator.mediaDevices.getUserMedia({ video: true });
+                document.getElementById('webcam').srcObject = stream;
+            } catch (error) {
+                console.error('Error accessing camera:', error);
+                alert('Could not access camera');
+            }
+        });
+
+        // Handle Attendance Marking
+        document.getElementById('markAttendance').addEventListener('click', async () => {
+            if (!stream) {
+                alert('Please start the camera first');
+                return;
+            }
+
+            document.getElementById('loading').style.display = 'flex';
+            
+            try {
+                const canvas = document.createElement('canvas');
+                const video = document.getElementById('webcam');
+                canvas.width = video.videoWidth;
+                canvas.height = video.videoHeight;
+                canvas.getContext('2d').drawImage(video, 0, 0);
+                const imageData = canvas.toDataURL('image/jpeg');
+
+                // First upload the image
+                const formData = new FormData();
+                formData.append('file', dataURLtoFile(imageData, 'capture.jpg'));
+                formData.append('userId', userId);
+                formData.append('appSlug', appSlug);
+
+                const uploadResponse = await fetch('https://r0c8kgwocscg8gsokogwwsw4.zetaverse.one/storage/upload', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': 'Bearer 8WcCWeC8HrQ4AxRoBALuwjOMW4K3'
+                    },
+                    body: formData
+                });
+
+                const uploadResult = await uploadResponse.json();
+
+                // Now use AI to analyze the image
+                const aiResponse = await fetch('https://r0c8kgwocscg8gsokogwwsw4.zetaverse.one/ai', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': 'Bearer 8WcCWeC8HrQ4AxRoBALuwjOMW4K3',
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        messages: [{
+                            role: "user",
+                            content: [
+                                { type: "text", text: "Is there a face in this image?" },
+                                { type: "image_url", image_url: { url: uploadResult.url } }
+                            ]
+                        }]
+                    })
+                });
+
+                const aiResult = await aiResponse.json();
+                
+                if (aiResult.message.toLowerCase().includes('yes')) {
+                    // Record attendance
+                    await fetch('https://r0c8kgwocscg8gsokogwwsw4.zetaverse.one/db', {
+                        method: 'POST',
+                        headers: {
+                            'Authorization': 'Bearer 8WcCWeC8HrQ4AxRoBALuwjOMW4K3',
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            userId,
+                            appSlug,
+                            action: 'create',
+                            table: 'attendance',
+                            data: {
+                                timestamp: new Date().toISOString(),
+                                imageUrl: uploadResult.url
+                            }
+                        })
+                    });
+                    alert('Attendance marked successfully!');
+                } else {
+                    alert('No face detected. Please try again.');
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                alert('Failed to mark attendance. Please try again.');
+            } finally {
+                document.getElementById('loading').style.display = 'none';
+            }
+        });
+
+        // Handle Report Download
+        document.getElementById('downloadReport').addEventListener('click', async () => {
+            document.getElementById('loading').style.display = 'flex';
+            
+            try {
+                const response = await fetch('https://r0c8kgwocscg8gsokogwwsw4.zetaverse.one/db', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': 'Bearer 8WcCWeC8HrQ4AxRoBALuwjOMW4K3',
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        userId,
+                        appSlug,
+                        action: 'read',
+                        table: 'attendance'
+                    })
+                });
+
+                const result = await response.json();
+                if (!result.error) {
+                    const csvContent = "data:text/csv;charset=utf-8," + 
+                        "Timestamp,Image URL\n" + 
+                        result.data.map(record => 
+                            `${record.data.timestamp},${record.data.imageUrl}`
+                        ).join("\n");
+
+                    const encodedUri = encodeURI(csvContent);
+                    const link = document.createElement("a");
+                    link.setAttribute("href", encodedUri);
+                    link.setAttribute("download", "attendance_report.csv");
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                alert('Failed to download report. Please try again.');
+            } finally {
+                document.getElementById('loading').style.display = 'none';
+            }
+        });
+
+        // Utility function to convert Data URL to File
+        function dataURLtoFile(dataurl, filename) {
+            let arr = dataurl.split(','),
+                mime = arr[0].match(/:(.*?);/)[1],
+                bstr = atob(arr[1]),
+                n = bstr.length,
+                u8arr = new Uint8Array(n);
+            while(n--){
+                u8arr[n] = bstr.charCodeAt(n);
+            }
+            return new File([u8arr], filename, {type:mime});
+        }
+    </script>
+<script>document.body.addEventListener('wheel', e => { if (!e.ctrlKey) return; e.preventDefault(); return }, { passive: false })</script>
+	</body>
+</html>
